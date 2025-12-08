@@ -127,6 +127,7 @@
             color: white;
             text-shadow: 0 0 3px rgba(0,0,0,0.8);
             font-weight: bold;
+            pointer-events: none;
         }
 
         .custom-color-btn:hover {
@@ -137,6 +138,27 @@
         .custom-color-btn.active {
             border: 3px solid #1f2937;
             box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1f2937;
+        }
+
+        /* Wrapper for custom color input */
+        .custom-color-btn-wrapper {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        /* Hide the actual color input but keep it functional */
+        .custom-color-input {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .custom-color-input:disabled {
+            cursor: not-allowed;
         }
 
         /* Tooltip Styles - New! */
@@ -205,6 +227,10 @@
         .neighborhood-item.highlighted { 
             background: #e0f2fe; 
             border-left: 4px solid #0ea5e9;
+        }
+        .neighborhood-item.active-for-coloring {
+            background: #fef3c7 !important;
+            border-left: 4px solid #f59e0b !important;
         }
         .neighborhood-item input[type="checkbox"] { cursor: pointer; }
         .neighborhood-item label { flex: 1; font-size: 14px; color: #374151; }
@@ -434,6 +460,7 @@
             currentDefaultColor: '#4ECDC4', // Default color (will be overridden by palette selection)
             activeColor: '#157F60', // Currently active color from palette (default to Green)
             activeId: null,         // The neighborhood ID that is currently interacting with the color picker
+            activeNeighborhood: null, // The neighborhood currently being colored (NEW)
         };
 
         /**
@@ -505,19 +532,27 @@
                 `;
             });
 
-            // Add custom color picker button
+            // Add custom color picker as a styled input (Safari-compatible)
             const isCustomActive = !presetColors.find(c => c.hex === state.activeColor);
+            const customButtonTitle = state.activeNeighborhood 
+                ? "Pick custom color" 
+                : "Click a neighborhood first, then use custom color";
+            
+            const isDisabled = !state.activeNeighborhood;
+            
             paletteHtml += `
-                <input type="color" id="customColorPicker" 
-                       class="w-0 h-0 p-0 border-none"
-                       onchange="handleCustomColorPick(this.value)"
-                       value="${state.activeColor}">
-                <div class="custom-color-btn ${isCustomActive ? 'active' : ''}" 
-                     title="Custom Color"
-                     onclick="openCustomColorPicker()"
-                     id="customColorBtn">
-                    +
-                </div>
+                <label class="custom-color-btn-wrapper" title="${customButtonTitle}">
+                    <input type="color" 
+                           id="customColorPicker" 
+                           class="custom-color-input"
+                           onchange="handleCustomColorPick(this.value)"
+                           value="${state.activeColor}"
+                           ${isDisabled ? 'disabled' : ''}>
+                    <div class="custom-color-btn ${isCustomActive ? 'active' : ''}" 
+                         style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
+                        +
+                    </div>
+                </label>
             `;
 
             paletteContainer.innerHTML = paletteHtml;
@@ -530,28 +565,36 @@
             state.activeColor = color;
             state.currentDefaultColor = color;
             
-            // Palette now only sets the active color for new selections
-            // Does NOT apply to already-selected neighborhoods
+            // If there's an active neighborhood, apply color to it
+            if (state.activeNeighborhood) {
+                state.colors[state.activeNeighborhood] = color;
+                updateMapAndList();
+            }
             
             renderColorPalette();
         }
 
         /**
-         * Opens the custom color picker
+         * Opens custom color picker for the active neighborhood
+         * Note: Now handled directly by the visible color input element
          */
         function openCustomColorPicker() {
-            document.getElementById('customColorPicker').click();
+            // This function is no longer needed as the color input is directly clickable
+            // Keeping it for backwards compatibility
         }
 
         /**
-         * Handles custom color selection
+         * Handles custom color selection from native picker
          */
         function handleCustomColorPick(color) {
             state.activeColor = color;
             state.currentDefaultColor = color;
             
-            // Custom color picker now only sets the active color for new selections
-            // Does NOT apply to already-selected neighborhoods
+            // If there's an active neighborhood, apply color to it
+            if (state.activeNeighborhood) {
+                state.colors[state.activeNeighborhood] = color;
+                updateMapAndList();
+            }
             
             renderColorPalette();
         }
@@ -782,29 +825,50 @@
          */
         function handleColorInputClick(event, id) {
             event.stopPropagation();
+            event.preventDefault(); // Prevent color picker from opening immediately
             
-            // List-First Workflow: Select if not already selected
+            // Select if not already selected
             if (!state.selected.has(id)) {
                 toggleNeighborhoodSelection(id, false);
             }
 
-            // Highlight the list item
-            listHighlight(id, true); 
-
+            // Set this as the active neighborhood for coloring
+            state.activeNeighborhood = id;
             state.activeId = id;
-            // The native color picker opens automatically on click
-            // No need to call .click() programmatically
+            
+            // Highlight the active neighborhood in the list
+            highlightActiveNeighborhood(id);
+            
+            // Now user can click palette colors to apply to this neighborhood
+            // Or click the custom color button to open the native picker
         }
 
+
+        /**
+         * Highlights the active neighborhood in the list for visual feedback
+         */
+        function highlightActiveNeighborhood(id) {
+            // Remove previous active-for-coloring highlights
+            document.querySelectorAll('.neighborhood-item').forEach(item => {
+                item.classList.remove('active-for-coloring');
+            });
+            
+            // Add active-for-coloring highlight to current neighborhood
+            const item = document.getElementById(`item-${id}`);
+            if (item) {
+                item.classList.add('active-for-coloring');
+            }
+        }
 
         /**
          * Handles color change from the native color input.
          */
         function handleNativeColorChange(id, color) {
+            // Apply the custom color to the neighborhood
             state.colors[id] = color;
+            state.activeColor = color;
             updateMapAndList();
-            listHighlight(id, false);
-            state.activeId = null;
+            renderColorPalette();
         }
 
         /**
@@ -820,10 +884,7 @@
             
             if (newCheckedState) {
                 state.selected.add(id);
-                // Assign active color from palette if no color is set yet
-                if (!state.colors[id]) {
-                    state.colors[id] = state.activeColor;
-                }
+                // DON'T auto-assign color - let chips stay grey until user picks a color
             } else {
                 state.selected.delete(id);
                 // Remove color when deselecting - will revert to gray default
@@ -880,21 +941,29 @@
                 const checkbox = document.getElementById(`cb-${item.id}`);
 
                 if (state.selected.has(item.id)) {
-                    const color = state.colors[item.id];
+                    // Neighborhood is selected
                     
-                    // Map Update
-                    mapPath.style.stroke = color;
-                    mapPath.style.fill = 'transparent'; 
-                    mapPath.classList.add('selected');
-
-                    // List Checkbox Update (Crucial for when rendering filtered lists)
-                    if (checkbox) checkbox.checked = true;
-
-                    // Color Input Update
-                    if (colorInput) {
-                        colorInput.value = color;
-                        colorInput.classList.add('selected');
+                    if (state.colors[item.id]) {
+                        // Has a color assigned
+                        const color = state.colors[item.id];
+                        mapPath.style.stroke = color;
+                        mapPath.style.fill = 'transparent'; 
+                        mapPath.classList.add('selected');
+                        if (colorInput) {
+                            colorInput.value = color;
+                        }
+                    } else {
+                        // Selected but no color assigned yet - stay grey
+                        mapPath.style.stroke = '#374151';
+                        mapPath.style.fill = 'transparent';
+                        mapPath.classList.add('selected');
+                        if (colorInput) {
+                            colorInput.value = '#374151';
+                        }
                     }
+
+                    // List Checkbox Update
+                    if (checkbox) checkbox.checked = true;
 
                 } else {
                     // Deselected state
