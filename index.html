@@ -530,13 +530,10 @@
             state.activeColor = color;
             state.currentDefaultColor = color;
             
-            // Apply this color to all currently selected neighborhoods
-            state.selected.forEach(id => {
-                state.colors[id] = color;
-            });
+            // Palette now only sets the active color for new selections
+            // Does NOT apply to already-selected neighborhoods
             
             renderColorPalette();
-            updateMapAndList();
         }
 
         /**
@@ -553,13 +550,10 @@
             state.activeColor = color;
             state.currentDefaultColor = color;
             
-            // Apply this color to all currently selected neighborhoods
-            state.selected.forEach(id => {
-                state.colors[id] = color;
-            });
+            // Custom color picker now only sets the active color for new selections
+            // Does NOT apply to already-selected neighborhoods
             
             renderColorPalette();
-            updateMapAndList();
         }
 
         /**
