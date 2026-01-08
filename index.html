@@ -1040,11 +1040,16 @@
                 baseImage.setAttribute('href', 'https://raw.githubusercontent.com/curiousmino/Manhattan_map/refs/heads/main/Manhattan%20Map.svg');
             }
 
-            // Set the fill of non-selected paths for a clean export background
+            // HIDE unselected neighborhood borders in export (make them invisible)
             tempSvg.querySelectorAll('path.neighborhood').forEach(path => {
                 const id = path.getAttribute('data-id');
                 if (!state.selected.has(id)) {
+                    // Make unselected borders invisible in export
+                    path.style.stroke = 'transparent'; 
                     path.style.fill = 'transparent'; 
+                } else {
+                    // Keep selected borders visible with their assigned color
+                    path.style.fill = 'transparent';
                 }
             });
 
